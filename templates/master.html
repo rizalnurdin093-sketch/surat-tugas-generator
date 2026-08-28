@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Master Data Surat — Surat Tugas Generator{% endblock %}
+{% block content %}
+<div class="card">
+    <h1>Master Data Surat</h1>
+
+    <!-- Search + Export -->
+    <div class="search-bar">
+        <form method="GET" action="{{ url_for('master') }}" style="display:flex;gap:8px;flex:1;flex-wrap:wrap;">
+            <input type="text" name="q" placeholder="Cari judul / nomor / tempat..." value="{{ search_q }}">
+            <button type="submit" class="btn btn-secondary">Cari</button>
+        </form>
+        <a href="{{ url_for('master_export') }}" class="btn btn-primary" style="text-decoration:none;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+            </svg>
+            Export .xlsx
+        </a>
+    </div>
+
+    {% if history %}
+    <div class="table-wrap">
+        <table class="peserta-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Judul</th>
+                    <th>Nomor Surat</th>
+                    <th>Tempat</th>
+                    <th>Tanggal</th>
+                    <th>Dibuat</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in history %}
+                <tr>
+                    <td class="muted">{{ r.id }}</td>
+                    <td>{{ r.judul }}</td>
+                    <td>
+                        {% if r.nomor_surat %}
+                            {{ r.nomor_surat }}/Tbk/ST-4010/26-S8.7.1
+                        {% else %}
+                            <span class="muted">/Tbk/ST-4010/26-S8.7.1</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ r.tempat }}</td>
+                    <td style="font-size:12px;">{{ r.tanggal }}</td>
+                    <td class="muted" style="font-size:12px;">{{ r.created_at }}</td>
+                    <td>
+                        <div class="actions-cell">
+                            <!-- Atur nomor -->
+                            <form method="POST" action="{{ url_for('master_atur_nomor', surat_id=r.id) }}" style="display:flex;gap:4px;align-items:center;">
+                                <input type="text" name="nomor_angka" value="{{ r.nomor_surat }}" placeholder="No." class="number-input">
+                                <button type="submit" class="btn btn-secondary btn-icon" title="Simpan nomor" aria-label="Simpan nomor">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                    </svg>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m-1.5 0h1.5m-18 0v11.25A2.25 2.25 0 006 16.5h12A2.25 2.25 0 0020 14.25V12m-18 0h18m-18 0v-1.5M18 14.25v.75a.75.75 0 01-.75.75H6.75A.75.75 0 016 15V3.75A2.25 2.25 0 018.25 1.5H18M15 9.75a.75.75 0 00-.75-.75H8.25a.75.75 0 010-1.5h6a.75.75 0 00.75-.75v-.75m-1.5 3.75H10.5a.75.75 0 000 1.5h3a.75.75 0 000-1.5z" />
+        </svg>
+        <p>Belum ada data surat.</p>
+        <p class="muted" style="font-size:13px;">Buat surat dulu dari halaman "Buat Surat".</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

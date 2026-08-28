@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Runtime data & secrets
+*.db
+*.sqlite3
+uploads/
+generated/
+_design_backup/
+
+# Editor/OS
+.DS_Store
+.vscode/
+.idea/

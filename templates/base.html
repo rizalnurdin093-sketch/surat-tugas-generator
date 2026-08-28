@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Surat Tugas Generator{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Header & Navbar -->
+    <header class="navbar">
+        <div class="brand">SUGEN</div>
+
+        {% if username %}
+        <div class="nav-actions">
+            <!-- Nav: Buat Surat -->
+            <a href="{{ url_for('index') }}" class="nav-icon" title="Buat Surat" aria-label="Buat Surat">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+            </a>
+
+            <!-- Nav: Master Data -->
+            <a href="{{ url_for('master') }}" class="nav-icon" title="Master Data" aria-label="Master Data">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                </svg>
+            </a>
+
+            <!-- Profile Dropdown -->
+            <div class="profile-menu" id="profileMenu">
+                <button class="profile-trigger" id="profileTrigger" aria-expanded="false" aria-haspopup="true" aria-label="Profil pengguna">
+                    <div class="profile-avatar">{{ username[0].upper() }}</div>
+                    <span class="profile-name">{{ username }}</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 2px;">
+                        <path d="m6 9 6 6 6-6"/>
+                    </svg>
+                </button>
+                <div class="profile-dropdown" role="menu">
+                    <div class="profile-dropdown-header">
+                        <div class="profile-dropdown-name">{{ username }}</div>
+                        <div class="profile-dropdown-role">Administrator</div>
+                    </div>
+                    <form method="POST" action="{{ url_for('logout') }}" style="display: contents;">
+                        <button type="submit" class="profile-dropdown-item danger" role="menuitem">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                            </svg>
+                            Logout
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </header>
+
+    <main class="container">
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flashes">
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>© {{ username or 'Surat Tugas Generator' }} — Division of Human Capital PT TIMAH (Persero) Tbk</p>
+    </footer>
+
+    <!-- Minimal JS for profile dropdown -->
+    <script>
+    (function() {
+        const menu = document.getElementById('profileMenu');
+        const trigger = document.getElementById('profileTrigger');
+        if (!menu || !trigger) return;
+
+        trigger.addEventListener('click', function(e) {
+            e.stopPropagation();
+            menu.classList.toggle('open');
+            trigger.setAttribute('aria-expanded', menu.classList.contains('open'));
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!menu.contains(e.target)) {
+                menu.classList.remove('open');
+                trigger.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                menu.classList.remove('open');
+                trigger.setAttribute('aria-expanded', 'false');
+                trigger.focus();
+            }
+        });
+    })();
+    </script>
+</body>
+</html>

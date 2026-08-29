@@ -286,7 +286,7 @@ body {
   font-weight: 600;
   line-height: var(--leading-tight);
   color: var(--color-text);
-  margin-bottom: var(--space-xs);
+  margin-bottom: var(--space-lg);
   letter-spacing: -0.02em;
 }
 

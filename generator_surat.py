@@ -1,7 +1,7 @@
 """
-generator_surat.py — Generate surat tugas .docx dari template.
+Generator surat tugas .docx dari template.
 
-Logic:
+Logika:
 - Buka template_surat.docx
 - Isi field: Hari/Tanggal (P10), Judul (P11), Tempat (P12), judul daftar peserta (P35)
 - Kosongkan (sesuai keputusan user): Nomor (P1), TTD (Tabel 0), Nomor & Tanggal Lampiran (Tabel 1)
@@ -14,10 +14,29 @@ Dipisah dari app.py supaya gampang dites & dilacak kalau ada bug.
 import os
 import shutil
 import re
+import datetime
 from copy import deepcopy
-
 from docx import Document
 
+# Helper: mapping bulan Inggris ke Indonesia
+_BULAN_MAP = {
+    "January": "Januari",
+    "February": "Februari",
+    "March": "Maret",
+    "April": "April",
+    "May": "Mei",
+    "June": "Juni",
+    "July": "Juli",
+    "August": "Agustus",
+    "September": "September",
+    "October": "Oktober",
+    "November": "November",
+    "December": "Desember",
+}
+
+def _bulan_indonesia(bulan_eng):
+    """Map nama bulan Inggris menjadi Indonesia. Fallback: kembalikan asli."""
+    return _BULAN_MAP.get(bulan_eng, bulan_eng)
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "templates_surat", "template_surat.docx")
 
@@ -128,7 +147,6 @@ def _add_row_like(table, template_row):
     """
     import copy
     from docx.oxml.ns import qn
-
     new_tr = copy.deepcopy(template_row._tr)
     table._tbl.append(new_tr)
 
@@ -189,7 +207,6 @@ def generate_surat(
     judul: str,
     tempat: str,
     hari_tanggal: str,
-    tanggal_surat: str,
     peserta: list,
     output_dir: str,
     nomor_angka: str = "",
@@ -200,9 +217,8 @@ def generate_surat(
 
     Args:
         judul: judul pelatihan (cth: "Human Resources Management Essentials")
-        tempat: lokasi pelatihan (cth: "Timah Learning Center - Pemali")
-        hari_tanggal: tanggal pelatihan (cth: "Senin-Selasa / 31 Agustus - 01 September 2026")
-        tanggal_surat: bulan+ tahun terbit surat (cth: "September 2026"). Hari tetap kosong manual.
+        tempat: lokasi pelatihan (cth: "Timah Learning Center")
+        hari_tanggal: tanggal pelatihan (cth: "Senin-Selasa / 13 Agustus 2026 - 14 Agustus 2026")
         peserta: list of dict {'nama', 'nik', 'divisi'} — sudah urut A-Z
         nomor_angka: opsional — string angka (cth "2630") yang akan diletakkan di depan
                      "/Tbk/ST-4010/26-S8.7.1". Kosong -> template dibiarkan apa adanya.
@@ -211,6 +227,7 @@ def generate_surat(
     Returns:
         (absolute_path, filename) file .docx yang berhasil dibuat
     """
+    tanggal_surat_auto = datetime.datetime.now().strftime("%B %Y")
     if not peserta:
         raise ValueError("Daftar peserta kosong, tidak bisa generate surat.")
 
@@ -223,49 +240,39 @@ def generate_surat(
     doc = Document(output_path)
 
     # 1) Isi field Hari/Tanggal, Judul, Tempat (P10, P11, P12)
-    #    Template baru punya placeholder BOLD yang diganti nilainya → format bold terjaga.
-    p_hari = doc.paragraphs[P_HARI_TANGGAL]          # 'Hari/Tanggal\t: Hari/Tanggal\t' (nilai bold)
+    p_hari = doc.paragraphs[P_HARI_TANGGAL]
     _set_field_bold_placeholder(p_hari, "Hari/Tanggal", hari_tanggal)
 
-    p_judul = doc.paragraphs[P_JUDUL]                # 'Judul\t\t: Judul' (nilai bold)
+    p_judul = doc.paragraphs[P_JUDUL]
     _set_field_bold_placeholder(p_judul, "Judul", judul)
 
-    p_tempat = doc.paragraphs[P_TEMPAT]              # 'Tempat\t\t: Tempat' (nilai bold)
+    p_tempat = doc.paragraphs[P_TEMPAT]
     _set_field_bold_placeholder(p_tempat, "Tempat", tempat)
 
-    # 2) Nomor surat (P1) & Tabel 1 (Lampiran):
-    #    - Kalau nomor_angka kosong: biarkan template apa adanya ('/Tbk/...')
-    #    - Kalau nomor_angka ada: jadi '2630/Tbk/ST-4010/26-S8.7.1'
+    # 2) Nomor surat (P1)
     if nomor_angka:
         nomor_lengkap = f"{nomor_angka}/Tbk/ST-4010/26-S8.7.1"
-        # P1
         p_nomor = doc.paragraphs[1]
         _replace_in_paragraph(p_nomor, "/Tbk/ST-4010/26-S8.7.1", nomor_lengkap)
-        # Tabel 1 row1 cell2
         tabel_lampiran = doc.tables[TABLE_LAMPIRAN]
         sel_nomor = tabel_lampiran.rows[1].cells[2]
         _replace_in_paragraph(sel_nomor.paragraphs[0], "/Tbk/ST-4010/26-S8.7.1", nomor_lengkap)
     # else: biarkan template apa adanya (sudah '/Tbk/...')
 
-    # 3) Blok TTD (Tabel 0): biarkan seperti template (PT TIMAH, jabatan, nama penandatangan).
-    #    Yang diisi dari form: "Pada tanggal : <bulan> <tahun>" (hari tetap kosong manual).
+    # 3) Blok TTD (Tabel 0)
     tabel_ttd = doc.tables[TABLE_TTD]
-    if tanggal_surat:
-        sel_tanggal = tabel_ttd.rows[0].cells[0]
-        for p in sel_tanggal.paragraphs:
-            if "Pada tanggal" in p.text:
-                # p.text: "Pada tanggal  :       Agustus 2026" → ganti 'Agustus' dengan input,
-                # sisakan spasi di depan untuk penulisan hari manual.
-                _set_field_bold_placeholder(p, "Agustus", tanggal_surat.split()[-2] if len(tanggal_surat.split())>1 else tanggal_surat)
+    sel_tanggal = tabel_ttd.rows[0].cells[0]
+    bulan_eng = datetime.datetime.now().strftime("%B")  # "August"
+    bulan_id = _bulan_indonesia(bulan_eng)
+    for p in sel_tanggal.paragraphs:
+        if "Pada tanggal" in p.text:
+            _set_field_bold_placeholder(p, bulan_eng, bulan_id)
+            break
 
-    # 4) Tabel 1 (Lampiran): Nomor DIBIARKAN seperti template (ada '/Tbk/...').
-    #    Tanggal: isi dari tanggal_surat (bulan+tahun), diberi spasi depan utk nulis hari.
+    # 4) Tabel 1 (Lampiran)
     tabel_lampiran = doc.tables[TABLE_LAMPIRAN]
-    # row2 cell2 = nilai tanggal (bold, ukuran template dijaga)
     sel_lamp_tanggal = tabel_lampiran.rows[2].cells[2]
-    _set_cell_first_run(sel_lamp_tanggal, f"{tanggal_surat}", clear_other_paragraphs=True)
-    sel_lamp_nomor = tabel_lampiran.rows[1].cells[2]  # biarkan seperti template
-    # (tidak diubah)
+    _set_cell_first_run(sel_lamp_tanggal, f"{bulan_id} {datetime.datetime.now().year}", clear_other_paragraphs=True)
 
     # 5) Tabel 2 (Daftar Peserta): auto-skalasi + isi
     tabel_peserta = doc.tables[TABLE_PESERTA]
@@ -280,14 +287,12 @@ def generate_surat(
         for _ in range(baris_data_dibutuhkan - baris_data_saat_ini):
             _add_row_like(tabel_peserta, last_row)
 
-    # 6) Isi tiap baris peserta
-    #    Header (row 0) juga dipaksa Arial 10
     for cell in tabel_peserta.rows[0].cells:
         _apply_cell_font(cell)
     for i, p in enumerate(peserta, start=1):
         _fill_peserta_row(tabel_peserta.rows[i], i, p["nama"], p["nik"], p["divisi"])
 
-    # 7) Update judul daftar peserta (P35) — placeholder 'Judul' bold
+    # 6) Update judul daftar peserta (P35)
     if P_JUDUL_LAMPIRAN < len(doc.paragraphs):
         p_judul_lampiran = doc.paragraphs[P_JUDUL_LAMPIRAN]
         _set_field_bold_placeholder(p_judul_lampiran, "Judul", judul)

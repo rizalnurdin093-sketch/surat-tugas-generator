@@ -186,7 +186,6 @@ def generate():
     judul = form.get("judul", "Pelatihan")
     tempat = form.get("tempat", "")
     tanggal = form.get("tanggal", "")
-    tanggal_surat = form.get("tanggal_surat", "")
 
     if not judul or not tempat or not tanggal:
         flash("Isi dulu Judul, Tempat, dan Tanggal pelatihan.", "error")
@@ -197,7 +196,6 @@ def generate():
             judul=judul,
             tempat=tempat,
             hari_tanggal=tanggal,
-            tanggal_surat=tanggal_surat,
             peserta=peserta,
             output_dir=app.config["GENERATED_FOLDER"],
         )
@@ -210,7 +208,6 @@ def generate():
             jumlah_peserta=len(peserta),
             file_name=filename,
             file_peserta=session.get("uploaded_filename"),
-            tanggal_surat=tanggal_surat,
             dibuat_oleh=current_user.username,
         )
 
@@ -288,6 +285,9 @@ def master_export():
     import io
 
     history = database.get_all_surat_history()
+    # Urut ascending berdasarkan ID supaya surat terbaru berada paling bawah
+    # (1, 2, ..., 1234 dari atas ke bawah)
+    history.sort(key=lambda r: r["id"])
 
     wb = Workbook()
     ws = wb.active

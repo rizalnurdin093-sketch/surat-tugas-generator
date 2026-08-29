@@ -46,7 +46,7 @@
                     </td>
                     <td>{{ r.tempat }}</td>
                     <td style="font-size:12px;">{{ r.tanggal }}</td>
-                    <td class="muted" style="font-size:12px;">{{ r.created_at }}</td>
+                    <td class="muted" style="font-size:12px;">{{ utc_to_wib(r.created_at) }}</td>
                     <td>
                         <div class="actions-cell">
                             <!-- Atur nomor -->

@@ -18,7 +18,7 @@ Struktur:
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 
@@ -26,9 +26,24 @@ from config import Config
 import database
 from parser_excel import parse_excel, sort_az
 
+# Helper: UTC ke WIB (UTC+7)
+WIB = timezone(timedelta(hours=7))
+def utc_to_wib(utc_str):
+    """Konversi string UTC 'YYYY-MM-DD HH:MM:SS' ke WIB string."""
+    if not utc_str:
+        return ""
+    try:
+        dt = datetime.strptime(utc_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        return dt.astimezone(WIB).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return utc_str
+
 # ── Setup Flask ─────────────────────────────────────────────────────
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Register helper ke Jinja
+app.jinja_env.globals['utc_to_wib'] = utc_to_wib
 
 # Pastikan folder yang dibutuhkan ada
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)

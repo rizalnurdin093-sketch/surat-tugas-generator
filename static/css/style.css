@@ -86,10 +86,34 @@ body {
 }
 
 .navbar .brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.navbar .brand-logo {
+  width: auto;
+  height: 48px;
+}
+
+.navbar .brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.navbar .brand-name {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--color-text);
   letter-spacing: -0.02em;
+}
+
+.navbar .brand-sub {
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: var(--color-text-secondary, #8892a0);
+  letter-spacing: 0.05em;
 }
 
 .navbar .nav-actions {

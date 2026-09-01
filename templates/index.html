@@ -28,8 +28,12 @@
     <div class="preview-section">
         <h2>Preview Peserta ({{ total }})</h2>
         <p class="file-name">Dari file: <strong>{{ file_name }}</strong></p>
+        <label class="sort-toggle" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:.75rem;font-size:.9rem;cursor:pointer;">
+            <input type="checkbox" id="sortNama" style="width:16px;height:16px;accent-color:var(--accent, #00897B);">
+            Urutkan Nama (A-Z)
+        </label>
         <div class="table-wrap">
-            <table class="peserta-table">
+            <table class="peserta-table" id="pesertaTable">
                 <thead>
                     <tr><th>NO</th><th>NAMA</th><th>NIK</th><th>DIVISION</th></tr>
                 </thead>
@@ -58,4 +62,28 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+(function() {
+    const table = document.getElementById('pesertaTable');
+    const checkbox = document.getElementById('sortNama');
+    if (!table || !checkbox) return;
+    // simpan urut asli (default) sekali saja
+    const originalRows = Array.from(table.tBodies[0].rows);
+
+    checkbox.addEventListener('change', function() {
+        const tbody = table.tBodies[0];
+        let rows = originalRows.slice();
+        if (this.checked) {
+            rows.sort(function(a, b) {
+                return a.cells[1].textContent.localeCompare(b.cells[1].textContent, 'id');
+            });
+        }
+        // kosongkan lalu isi ulang
+        rows.forEach(function(r) { tbody.appendChild(r); });
+        // perbarui kolom NO
+        rows.forEach(function(r, i) { r.cells[0].textContent = i + 1; });
+    });
+})();
+</script>
 {% endblock %}

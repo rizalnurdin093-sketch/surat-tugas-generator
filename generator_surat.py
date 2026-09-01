@@ -1,14 +1,22 @@
 """
-Generator surat tugas .docx dari template.
+Generator surat tugas .docx dari template (struktur 5 tabel — template baru).
+
+Template (templates_surat/template_surat.docx) punya struktur:
+- Paragraph: p4="SURAT TUGAS", p5="Nomor: ...", p33="Daftar Peserta", p34=judul daftar
+- Tabel 0 (2x3): Nama/NIK, Jabatan  -> identitas pejabat TTD
+- Tabel 1 (3x3): Hari/Tanggal(r0c2), Judul(r1c2), Tempat(r2c2)
+- Tabel 2 (4x1): Blok TTD (Ditetapkan di / Pada tanggal)
+- Tabel 3 (3x3): Lampiran 1 - Nomor(r1c2), Tanggal(r2c2)
+- Tabel 4 (33x4): Daftar peserta - NO, NAMA, NIK, DIVISION
 
 Logika:
-- Buka template_surat.docx
-- Isi field: Hari/Tanggal (P10), Judul (P11), Tempat (P12), judul daftar peserta (P35)
-- Kosongkan (sesuai keputusan user): Nomor (P1), TTD (Tabel 0), Nomor & Tanggal Lampiran (Tabel 1)
-- Hapus baris kosong di Tabel 2, ganti dengan baris peserta sesuai jumlah (auto-skalasi)
-- Output: file .docx siap download
-
-Dipisah dari app.py supaya gampang dites & dilacak kalau ada bug.
+- Salin template -> isi field Hari/Tanggal, Judul, Tempat (Tabel 1)
+- Isi/update tanggal TTD (Tabel 2) -> bulan sekarang
+- Isi nomor surat (paragraf p5 + Tabel 3 r1c2)
+- Isi tanggal Lampiran (Tabel 3 r2c2)
+- Auto-skalasi + isi tabel peserta (Tabel 4)
+- Update judul daftar peserta (p34)
+- Set margin sesuai spesifikasi (kiri 3cm, kanan/atas/bawah 2.5cm)
 """
 
 import os
@@ -17,8 +25,11 @@ import re
 import datetime
 from copy import deepcopy
 from docx import Document
+from docx.shared import Cm, Pt
 
-# Helper: mapping bulan Inggris ke Indonesia
+# ============================================================
+# Helper: mapping bulan Inggris -> Indonesia
+# ============================================================
 _BULAN_MAP = {
     "January": "Januari",
     "February": "Februari",
@@ -34,66 +45,53 @@ _BULAN_MAP = {
     "December": "Desember",
 }
 
+
 def _bulan_indonesia(bulan_eng):
-    """Map nama bulan Inggris menjadi Indonesia. Fallback: kembalikan asli."""
     return _BULAN_MAP.get(bulan_eng, bulan_eng)
+
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "templates_surat", "template_surat.docx")
 
-# Index yang sudah diverifikasi dari inspeksi template.
-P_HARI_TANGGAL = 10
-P_JUDUL = 11
-P_TEMPAT = 12
-P_JUDUL_LAMPIRAN = 35
+# Indeks struktur template baru (diverifikasi dari template_baru.docx)
+P_NOMOR_SURAT = 5          # "Nomor : /Tbk/..."
+P_JUDUL_DAFTAR = 34        # judul di bawah "Daftar Peserta"
 
-TABLE_TTD = 0          # Baris TTD dibiarkan seperti template (PT TIMAH, dll terisi)
-TABLE_LAMPIRAN = 1     # Nomor + Tanggal lampiran dikosongkan (nomor manual)
-TABLE_PESERTA = 2      # Daftar peserta — auto-skalasi
+TABLE_IDENTITAS = 0        # Nama/NIK, Jabatan
+TABLE_FORM = 1             # Hari/Tanggal, Judul, Tempat
+TABLE_TTD = 2              # blok TTD
+TABLE_LAMPIRAN = 3         # Nomor + Tanggal lampiran
+TABLE_PESERTA = 4          # daftar peserta
+
+# Margin (cm) sesuai permintaan user: kiri 3, kanan/atas/bawah 2.5
+MARGIN_TOP_CM = 2.5
+MARGIN_BOTTOM_CM = 2.5
+MARGIN_RIGHT_CM = 2.5
+MARGIN_LEFT_CM = 3.0
+
+FONT_TABEL = "Arial"
+FONT_TABEL_SIZE = 10  # pt
 
 
+# ============================================================
+# Helper fungsi (dipertahankan dari versi lama, s/d adapt struktur)
+# ============================================================
 def _clean(text):
-    """Bersihkan karakter non-breaking space dan rapikan whitespace."""
     if text is None:
         return ""
     return " ".join(str(text).replace("\xa0", " ").split())
 
 
-def _replace_in_paragraph(paragraph, old_text, new_text):
-    """
-    Ganti old_text dengan new_text di dalam paragraph dengan MEMPERTAHANKAN format
-    run pertama yang mengandung teks tsb (bukan menulis ulang ke run 0).
-
-    Digunakan untuk kolom label+placeholder yang format bold-nya harus dijaga.
-    """
-    remaining = old_text
-    for idx, run in enumerate(paragraph.runs):
-        if not remaining:
-            # teks target sudah habis, kosongkan sisa run
-            run.text = ""
-            continue
-        if run.text and remaining.startswith(run.text):
-            remaining = remaining[len(run.text):]
-            continue
-        # run ini adalah bagian dari teks yang akan diganti
-        if new_text and run.text:
-            run.text = new_text
-            new_text = ""  # hanya isi di satu run
-        else:
-            run.text = ""
+def _replace_in_paragraph(paragraph, search, new_value):
+    """Ganti 'search' -> 'new_value' di seluruh run paragraph."""
+    for run in paragraph.runs:
+        if search in run.text:
+            run.text = run.text.replace(search, new_value)
+            return True
+    return False
 
 
 def _set_field_bold_placeholder(paragraph, search_placeholder, new_value):
-    """
-    Ganti teks placeholder (yang BOLD) di paragraph dengan new_value,
-    mempertahankan format run tsb. Mencari run yang mengandung placeholder
-    DAN bold=True (karena label di P10/P11/P12 non-bold, nilai placeholder bold).
-    """
-    # Prioritas: run yang contains placeholder AND bold
-    for run in paragraph.runs:
-        if run.bold and search_placeholder in run.text and run.text.strip():
-            run.text = new_value
-            return True
-    # Fallback: run pertama yang contains placeholder
+    """Set nilai pada run yang mengandung placeholder."""
     for run in paragraph.runs:
         if search_placeholder in run.text and run.text.strip():
             run.text = new_value
@@ -102,10 +100,6 @@ def _set_field_bold_placeholder(paragraph, search_placeholder, new_value):
 
 
 def _set_cell_first_run(cell, new_value, clear_other_paragraphs=True):
-    """
-    Isi nilai pada run pertama paragraph pertama di cell, kosongkan sisa runs.
-    Mempertahankan format (bold/size) run pertama.
-    """
     if clear_other_paragraphs:
         for p in cell.paragraphs[1:]:
             p._element.getparent().remove(p._element)
@@ -118,40 +112,35 @@ def _set_cell_first_run(cell, new_value, clear_other_paragraphs=True):
         first_p.add_run(new_value)
 
 
-def _append_to_paragraph(paragraph, suffix):
-    """Append text di akhir paragraph (ke run terakhir)."""
-    if paragraph.runs:
-        paragraph.runs[-1].text += suffix
-    else:
-        paragraph.add_run(suffix)
+def _set_cell_from_query(cell, search, new_value):
+    """
+    Di dalam satu cell, ganti substring 'search' -> 'new_value'
+    pada run yang mengandungnya (untuk cell dengan teks campuran,
+    misal 'Batch 11: ...' diganti tanggal).
+    """
+    for p in cell.paragraphs:
+        for run in p.runs:
+            if search in run.text:
+                run.text = run.text.replace(search, new_value)
+    # Fallback: cell tanpa run tersedia -> set cell first run
+    return
 
 
 def _remove_table_rows(table, n_rows_to_remove):
-    """
-    Hapus baris dari bawah tabel sebanyak n_rows_to_remove.
-    python-docx tidak punya remove_row built-in, jadi pakai XML manipulation.
-    """
     tbl = table._tbl
-    rows = list(tbl.findall("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tr"))
+    ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    rows = list(tbl.findall(ns + "tr"))
     for row in rows[-n_rows_to_remove:]:
         tbl.remove(row)
 
 
 def _add_row_like(table, template_row):
-    """
-    Tambah baris baru ke tabel dengan menyalin XML baris template (format sama),
-    lalu hapus isi teksnya.
-
-    python-docx Table.add_row() tidak bisa clone format, jadi kita salin XML
-    <w:tr> secara manual dan kosongkan cell-nya.
-    """
     import copy
     from docx.oxml.ns import qn
+    from docx.table import _Row
+
     new_tr = copy.deepcopy(template_row._tr)
     table._tbl.append(new_tr)
-
-    # Kosongkan teks semua cell di baris baru (biar nanti diisi data)
-    from docx.table import _Row
     new_row = _Row(new_tr, table)
     for cell in new_row.cells:
         _clear_cell_text(cell)
@@ -159,8 +148,6 @@ def _add_row_like(table, template_row):
 
 
 def _clear_cell_text(cell):
-    """Kosongkan teks di cell, sisakan satu paragraph kosong."""
-    # Hapus semua paragraph kecuali yang pertama, kosongkan yang pertama
     for p in cell.paragraphs[1:]:
         p._element.getparent().remove(p._element)
     first = cell.paragraphs[0]
@@ -168,12 +155,7 @@ def _clear_cell_text(cell):
         run.text = ""
 
 
-FONT_TABEL = "Arial"
-FONT_TABEL_SIZE = 10  # pt
-
-
 def _apply_cell_font(cell):
-    """Paksa font Arial 10 di SEMUA run paragraph cell (tabel peserta)."""
     from docx.shared import Pt
     for p in cell.paragraphs:
         for run in p.runs:
@@ -182,16 +164,13 @@ def _apply_cell_font(cell):
 
 
 def _fill_peserta_row(row, no, nama, nik, divisi):
-    """Isi satu baris tabel peserta dengan NO, NAMA, NIK, DIVISION (font Arial 10)."""
     cells = row.cells
     if len(cells) < 4:
         return
     values = [str(no), _clean(nama), _clean(nik), _clean(divisi)]
     for cell, val in zip(cells, values):
-        # Hapus dulu semua paragraph di cell (kecuali paragraph pertama)
         for p in cell.paragraphs[1:]:
             p._element.getparent().remove(p._element)
-        # Set teks di paragraph pertama
         first_p = cell.paragraphs[0]
         if first_p.runs:
             first_p.runs[0].text = val
@@ -199,10 +178,21 @@ def _fill_peserta_row(row, no, nama, nik, divisi):
                 run.text = ""
         else:
             first_p.add_run(val)
-        # Paksa font Arial 10
         _apply_cell_font(cell)
 
 
+def _apply_margins(doc):
+    """Set margin dokumen sesuai spesifikasi."""
+    for section in doc.sections:
+        section.top_margin = Cm(MARGIN_TOP_CM)
+        section.bottom_margin = Cm(MARGIN_BOTTOM_CM)
+        section.left_margin = Cm(MARGIN_LEFT_CM)
+        section.right_margin = Cm(MARGIN_RIGHT_CM)
+
+
+# ============================================================
+# Fungsi utama
+# ============================================================
 def generate_surat(
     judul: str,
     tempat: str,
@@ -212,75 +202,86 @@ def generate_surat(
     nomor_angka: str = "",
 ) -> str:
     """
-    Generate 1 file .docx surat tugas.
-    Return path ke file hasil.
+    Generate 1 file .docx surat tugas (struktur template baru).
 
     Args:
-        judul: judul pelatihan (cth: "Human Resources Management Essentials")
-        tempat: lokasi pelatihan (cth: "Timah Learning Center")
-        hari_tanggal: tanggal pelatihan (cth: "Senin-Selasa / 13 Agustus 2026 - 14 Agustus 2026")
-        peserta: list of dict {'nama', 'nik', 'divisi'} — sudah urut A-Z
-        nomor_angka: opsional — string angka (cth "2630") yang akan diletakkan di depan
-                     "/Tbk/ST-4010/26-S8.7.1". Kosong -> template dibiarkan apa adanya.
-        output_dir: folder tempat simpan file hasil
+        judul: judul pelatihan
+        tempat: lokasi pelatihan
+        hari_tanggal: tanggal pelatihan (sama persis dengan input user)
+        peserta: list of dict {'nama', 'nik', 'divisi'}
+        nomor_angka: opsional string angka diletakkan di depan '/Tbk/ST-4010/26-S8.7.1'
+        output_dir: folder simpan file hasil
 
     Returns:
-        (absolute_path, filename) file .docx yang berhasil dibuat
+        (absolute_path, filename)
     """
-    tanggal_surat_auto = datetime.datetime.now().strftime("%B %Y")
     if not peserta:
         raise ValueError("Daftar peserta kosong, tidak bisa generate surat.")
 
-    # Salin template ke output file (jangan modify file template langsung)
+    now = datetime.datetime.now()
+    bulan_eng = now.strftime("%B")
+    bulan_id = _bulan_indonesia(bulan_eng)
+
+    # Salin template ke output
     safe_judul = re.sub(r"[^\w\s-]", "", judul).strip().replace(" ", "_")[:50]
     output_filename = f"surat_tugas_{safe_judul or 'tanpa_judul'}.docx"
     output_path = os.path.join(output_dir, output_filename)
     shutil.copyfile(TEMPLATE_PATH, output_path)
 
     doc = Document(output_path)
+    _apply_margins(doc)
 
-    # 1) Isi field Hari/Tanggal, Judul, Tempat (P10, P11, P12)
-    p_hari = doc.paragraphs[P_HARI_TANGGAL]
-    _set_field_bold_placeholder(p_hari, "Hari/Tanggal", hari_tanggal)
+    # --- 1) Isi formulir: Hari/Tanggal, Judul, Tempat (Tabel 1) ---
+    tabel_form = doc.tables[TABLE_FORM]
+    # Hari/Tanggal: pakai query replace (ganti semua 'September' lama? tidak —
+    #   ganti SELURUH isi cell tanggal dengan hari_tanggal baru)
+    sel_hari = tabel_form.rows[0].cells[2]
+    _set_cell_first_run(sel_hari, hari_tanggal, clear_other_paragraphs=True)
 
-    p_judul = doc.paragraphs[P_JUDUL]
-    _set_field_bold_placeholder(p_judul, "Judul", judul)
+    sel_judul = tabel_form.rows[1].cells[2]
+    _set_cell_first_run(sel_judul, judul, clear_other_paragraphs=True)
 
-    p_tempat = doc.paragraphs[P_TEMPAT]
-    _set_field_bold_placeholder(p_tempat, "Tempat", tempat)
+    sel_tempat = tabel_form.rows[2].cells[2]
+    _set_cell_first_run(sel_tempat, tempat, clear_other_paragraphs=True)
 
-    # 2) Nomor surat (P1)
-    if nomor_angka:
-        nomor_lengkap = f"{nomor_angka}/Tbk/ST-4010/26-S8.7.1"
-        p_nomor = doc.paragraphs[1]
-        _replace_in_paragraph(p_nomor, "/Tbk/ST-4010/26-S8.7.1", nomor_lengkap)
+    # --- 2) Nomor surat (paragraf p5 + Tabel 3 lampiran r1c2) ---
+    sufix_nomor = "/Tbk/ST-4010/26-S8.7.1"
+    if nomor_angka and nomor_angka.strip():
+        nomor_lengkap = f"{nomor_angka.strip()} {sufix_nomor}"
+        # p5: sufix terpecah di banyak run, jadi rebuild seluruh paragraf
+        if P_NOMOR_SURAT < len(doc.paragraphs):
+            p_nomor = doc.paragraphs[P_NOMOR_SURAT]
+            # Ganti seluruh teks paragraf (pertahankan run pertama utk format)
+            if p_nomor.runs:
+                # simpan run pertama utk format, isi run[0] = nilai baru, kosongkan sisanya
+                p_nomor.runs[0].text = f"Nomor : {nomor_lengkap}"
+                for run in p_nomor.runs[1:]:
+                    run.text = ""
+            else:
+                p_nomor.add_run(f"Nomor : {nomor_lengkap}")
         tabel_lampiran = doc.tables[TABLE_LAMPIRAN]
         sel_nomor = tabel_lampiran.rows[1].cells[2]
-        _replace_in_paragraph(sel_nomor.paragraphs[0], "/Tbk/ST-4010/26-S8.7.1", nomor_lengkap)
-    # else: biarkan template apa adanya (sudah '/Tbk/...')
+        _set_cell_from_query(sel_nomor, sufix_nomor, f"{nomor_angka.strip()} {sufix_nomor}")
 
-    # 3) Blok TTD (Tabel 0)
+    # --- 3) Tanggal TTD (Tabel 2) -> bulan sekarang (ID) ---
     tabel_ttd = doc.tables[TABLE_TTD]
-    sel_tanggal = tabel_ttd.rows[0].cells[0]
-    bulan_eng = datetime.datetime.now().strftime("%B")
-    bulan_id = _bulan_indonesia(bulan_eng)
-    for p in sel_tanggal.paragraphs:
+    sel_tanggal_ttd = tabel_ttd.rows[0].cells[0]
+    for p in sel_tanggal_ttd.paragraphs:
         if "Pada tanggal" in p.text:
-            # Template punya bulan ID lama (e.g. "Agustus"), replace ke bulan sekarang (ID)
             for run in p.runs:
                 for b_id_old in _BULAN_MAP.values():
                     if b_id_old in run.text:
                         run.text = run.text.replace(b_id_old, bulan_id)
             break
 
-    # 4) Tabel 1 (Lampiran)
+    # --- 4) Tanggal Lampiran (Tabel 3 r2c2) ---
     tabel_lampiran = doc.tables[TABLE_LAMPIRAN]
     sel_lamp_tanggal = tabel_lampiran.rows[2].cells[2]
-    _set_cell_first_run(sel_lamp_tanggal, f"{bulan_id} {datetime.datetime.now().year}", clear_other_paragraphs=True)
+    _set_cell_first_run(sel_lamp_tanggal, f"{bulan_id} {now.year}")
 
-    # 5) Tabel 2 (Daftar Peserta): auto-skalasi + isi
+    # --- 5) Daftar Peserta (Tabel 4): auto-skalasi + isi ---
     tabel_peserta = doc.tables[TABLE_PESERTA]
-    baris_header = 1
+    baris_header = 1  # baris header 'NO NAMA NIK DIVISION'
     baris_data_saat_ini = len(tabel_peserta.rows) - baris_header
     baris_data_dibutuhkan = len(peserta)
 
@@ -296,9 +297,9 @@ def generate_surat(
     for i, p in enumerate(peserta, start=1):
         _fill_peserta_row(tabel_peserta.rows[i], i, p["nama"], p["nik"], p["divisi"])
 
-    # 6) Update judul daftar peserta (P35)
-    if P_JUDUL_LAMPIRAN < len(doc.paragraphs):
-        p_judul_lampiran = doc.paragraphs[P_JUDUL_LAMPIRAN]
+    # --- 6) Update judul daftar peserta (p34) ---
+    if P_JUDUL_DAFTAR < len(doc.paragraphs):
+        p_judul_lampiran = doc.paragraphs[P_JUDUL_DAFTAR]
         _set_field_bold_placeholder(p_judul_lampiran, "Judul", judul)
 
     doc.save(output_path)

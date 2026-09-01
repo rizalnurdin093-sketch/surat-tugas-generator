@@ -90,15 +90,6 @@ def _replace_in_paragraph(paragraph, search, new_value):
     return False
 
 
-def _set_field_bold_placeholder(paragraph, search_placeholder, new_value):
-    """Set nilai pada run yang mengandung placeholder."""
-    for run in paragraph.runs:
-        if search_placeholder in run.text and run.text.strip():
-            run.text = new_value
-            return True
-    return False
-
-
 def _set_cell_first_run(cell, new_value, clear_other_paragraphs=True):
     if clear_other_paragraphs:
         for p in cell.paragraphs[1:]:
@@ -297,10 +288,16 @@ def generate_surat(
     for i, p in enumerate(peserta, start=1):
         _fill_peserta_row(tabel_peserta.rows[i], i, p["nama"], p["nik"], p["divisi"])
 
-    # --- 6) Update judul daftar peserta (p34) ---
-    if P_JUDUL_DAFTAR < len(doc.paragraphs):
-        p_judul_lampiran = doc.paragraphs[P_JUDUL_DAFTAR]
-        _set_field_bold_placeholder(p_judul_lampiran, "Judul", judul)
+    # --- 6) Update judul daftar peserta (p34): ganti SELURUH isi paragraf,
+    #         karena template berisi judul contoh lama, bukan placeholder 'Judul' ---
+    p_judul_lampiran = doc.paragraphs[P_JUDUL_DAFTAR]
+    if p_judul_lampiran.runs:
+        # Pertahankan run pertama (format teks), isi dengan judul baru
+        p_judul_lampiran.runs[0].text = _clean(judul)
+        for run in p_judul_lampiran.runs[1:]:
+            run.text = ""
+    else:
+        p_judul_lampiran.add_run(_clean(judul))
 
     doc.save(output_path)
     return output_path, output_filename

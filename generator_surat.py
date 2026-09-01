@@ -266,12 +266,11 @@ def generate_surat(
     bulan_id = _bulan_indonesia(bulan_eng)
     for p in sel_tanggal.paragraphs:
         if "Pada tanggal" in p.text:
-            # Cari semua kemungkinan bulan EN di template, replace ke bulan sekarang (ID)
+            # Template punya bulan ID lama (e.g. "Agustus"), replace ke bulan sekarang (ID)
             for run in p.runs:
-                for b_en in _BULAN_MAP.keys():
-                    if b_en in run.text:
-                        run.text = run.text.replace(b_en, bulan_id)
-                        break
+                for b_id_old in _BULAN_MAP.values():
+                    if b_id_old in run.text:
+                        run.text = run.text.replace(b_id_old, bulan_id)
             break
 
     # 4) Tabel 1 (Lampiran)

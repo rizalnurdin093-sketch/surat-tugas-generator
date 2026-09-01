@@ -262,11 +262,16 @@ def generate_surat(
     # 3) Blok TTD (Tabel 0)
     tabel_ttd = doc.tables[TABLE_TTD]
     sel_tanggal = tabel_ttd.rows[0].cells[0]
-    bulan_eng = datetime.datetime.now().strftime("%B")  # "August"
+    bulan_eng = datetime.datetime.now().strftime("%B")
     bulan_id = _bulan_indonesia(bulan_eng)
     for p in sel_tanggal.paragraphs:
         if "Pada tanggal" in p.text:
-            _set_field_bold_placeholder(p, bulan_eng, bulan_id)
+            # Cari semua kemungkinan bulan EN di template, replace ke bulan sekarang (ID)
+            for run in p.runs:
+                for b_en in _BULAN_MAP.keys():
+                    if b_en in run.text:
+                        run.text = run.text.replace(b_en, bulan_id)
+                        break
             break
 
     # 4) Tabel 1 (Lampiran)

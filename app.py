@@ -196,7 +196,10 @@ def generate():
     if not os.path.exists(filepath):
         flash("File tidak ditemukan. Upload ulang.", "error")
         return redirect(url_for("index"))
-    peserta = sort_az(parse_excel(filepath))
+    peserta = parse_excel(filepath)
+    # Sort A-Z hanya jika user pilih checkbox sort di preview
+    if request.form.get('sort') == 'az':
+        peserta = sort_az(peserta)
 
     judul = form.get("judul", "Pelatihan")
     tempat = form.get("tempat", "")
